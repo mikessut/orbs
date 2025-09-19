@@ -10,21 +10,30 @@ DAY2SEC = 3600 * 24
 G_CONST = 6.67430e-11  # m**3 / kg / s**2
 
 
+def push(arr: np.array, vec3: np.array):
+    arr[:-1, :] = arr[1:, :]
+    arr[-1, :] = vec3
+
+
+def extrapolate(arr, t_future):
+    result = np.zeros(3)
+    for n in range(3):
+        p = np.polyfit(np.arange(arr.shape[0]), arr[:, n], 2)
+        result[n] = np.polyval(p, arr.shape[0] - 1 + t_future)
+    return result
+
+
 class Body:
 
     mass = None  # in kg
 
     def __init__(self):
         self._posns = np.zeros((1, 3))
-        self.vel = np.zeros(3)
+        self.vel = np.zeros((3, 3))
 
     @property
     def pos(self):
         return self._posns[-1, :]
-    
-    # @property
-    # def vel(self):
-    #     return self._vs[-1, :]
     
     def pos_au(self):
         return self._posns / AU2M
@@ -39,12 +48,12 @@ class Body:
             d2 = self.dist(o)**2
             a += force_vec * G_CONST * o.mass / d2
 
-        pos = self.pos + self.vel * delt + 0.5 * a * delt**2
-        self.vel = self.vel + a * delt
+        v = extrapolate(self.vel, 0.5)
+
+        pos = self.pos + v * delt + 0.5 * a * delt**2
+        push(self.vel, self.vel[-1] + a * delt)
 
         self._posns = np.vstack([self._posns, pos])
-        # self._vs = np.vstack([self._vs, vel])
-
 
 
 class Earth(Body):
@@ -56,6 +65,9 @@ class Earth(Body):
         super().__init__()
         self._posns = np.array([[self.r, 0, 0]])
         self.vel = np.array([0, 2 * np.pi * self.r / YR2SEC, 0])
+        self.vel = np.vstack([
+            self.vel, self.vel, self.vel
+        ])
 
 
 class Sun(Body):
@@ -67,19 +79,21 @@ if __name__ == '__main__':
 
     t = 0
 
-    DELT = 1 * DAY2SEC * .01
+    DELT = 1 * DAY2SEC
 
     e = Earth()
     s = Sun()
 
-    while t < 2 * YR2SEC:
+    while t < 20 * YR2SEC:
 
         e.step(DELT, [s])
 
         t += DELT
 
-    plt.ion()
+    # plt.ion()
 
     plt.plot(e.pos_au()[:, 0], e.pos_au()[:, 1])
+    plt.plot(e.pos_au()[1, 0], e.pos_au()[-1, 1], '*')
     plt.axis('equal')
     plt.grid(True)
+    plt.show()
